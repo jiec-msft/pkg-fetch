@@ -17,7 +17,7 @@ jobs:
           - name: x64
             os: windows-2022
           - name: arm64
-            os: windows-11-arm64
+            os: windows-11-arm
 
     steps:
       - uses: actions/checkout@v4
