@@ -216,17 +216,10 @@ async function compileOnWindows(
   // Node24 builds on Windows crash with small-icu at icudat codegen
   // workaround for now is to enable full-icu
   // TODO check with newer node/tooling/gh-image versions
-  if (major >= 24) {
+  // Also use full-icu for Windows arm64 cross-compilation to ensure ICU support,
+  // since small-icu cannot be cross-compiled for arm64 on Windows
+  if (major >= 24 || (hostArch !== targetArch && targetArch === 'arm64')) {
     args.push('full-icu');
-  }
-
-  // Can't cross compile for arm64 with small-icu
-  if (
-    major < 24 &&
-    hostArch !== targetArch &&
-    !config_flags.includes('--with-intl=full-icu')
-  ) {
-    config_flags.push('--without-intl');
   }
 
   await spawn('cmd', args, {
