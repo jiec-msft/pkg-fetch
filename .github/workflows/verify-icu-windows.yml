@@ -1,0 +1,130 @@
+name: Verify ICU Support in Windows Binaries
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-icu-x64:
+    name: Verify ICU - Windows x64
+    runs-on: windows-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target-node: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          check-latest: true
+
+      - run: yarn install --ignore-engines
+
+      - run: choco install nasm
+
+      - name: Build Node.js binary
+        run: yarn start --node-range node${{ matrix.target-node }} --arch x64 --output dist
+
+      - name: Check if binary exists
+        id: check_file
+        run: |
+          ls dist
+          $exeFile = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
+          if ($exeFile) {
+            "EXE_PATH=$($exeFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "EXISTS=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "EXISTS=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      - name: Verify ICU support
+        if: steps.check_file.outputs.EXISTS == 'true'
+        run: |
+          $exePath = "${{ steps.check_file.outputs.EXE_PATH }}"
+          Write-Host "Testing binary: $exePath"
+          & $exePath scripts/test-icu.js
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ICU verification failed!"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check_file.outputs.EXISTS == 'true'
+        with:
+          name: node${{ matrix.target-node }}-windows-x64-icu-verified
+          path: dist\*
+
+  verify-icu-arm64:
+    name: Verify ICU - Windows ARM64
+    runs-on: windows-11-arm
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target-node: [20, 22, 24]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          check-latest: true
+
+      - run: yarn install --ignore-engines
+
+      # Note: NASM may need different installation on ARM64
+      - name: Install NASM
+        run: choco install nasm
+        continue-on-error: true
+
+      - name: Build Node.js binary (native ARM64)
+        run: yarn start --node-range node${{ matrix.target-node }} --arch arm64 --output dist
+
+      - name: Check if binary exists
+        id: check_file
+        run: |
+          ls dist
+          $exeFile = Get-ChildItem -Path dist -Filter "*.exe" | Select-Object -First 1
+          if ($exeFile) {
+            "EXE_PATH=$($exeFile.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            "EXISTS=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            "EXISTS=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      - name: Verify ICU support
+        if: steps.check_file.outputs.EXISTS == 'true'
+        run: |
+          $exePath = "${{ steps.check_file.outputs.EXE_PATH }}"
+          Write-Host "Testing binary: $exePath"
+          & $exePath scripts/test-icu.js
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "ICU verification failed!"
+            exit 1
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check_file.outputs.EXISTS == 'true'
+        with:
+          name: node${{ matrix.target-node }}-windows-arm64-icu-verified
+          path: dist\*
