@@ -84,7 +84,7 @@ jobs:
         with:
           token: ${{ github.token }}
           tag_name: ${{ steps.check_file.outputs.NODE_VERSION }}
-          files: dist\\*
+          files: dist/*
 
       - name: Add release url to summary
         if: steps.check_file.outputs.EXISTS == 'true' && steps.check_release.outputs.RELEASE_EXISTS != 'true'
