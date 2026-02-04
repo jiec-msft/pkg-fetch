@@ -1,4 +1,4 @@
-name: Build Node binaries for Windows
+name: Build Node binaries for Windows ARM
 
 on:
   workflow_dispatch:
