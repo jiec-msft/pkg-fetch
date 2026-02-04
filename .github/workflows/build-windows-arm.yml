@@ -1,4 +1,4 @@
-name: Build Node binaries for Windows
+name: Build Node binaries for Windows ARM
 
 on:
   workflow_dispatch:
@@ -75,6 +75,7 @@ jobs:
             "RELEASE_EXISTS=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
             Write-Host "Release $tag does not exist, will create"
           }
+          exit 0
 
       - name: Upload to Release
         if: steps.check_file.outputs.EXISTS == 'true' && steps.check_release.outputs.RELEASE_EXISTS != 'true'
