@@ -1,0 +1,90 @@
+name: Build Node binaries for Windows
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+jobs:
+  windows:
+    runs-on: ${{ matrix.arch.os }}
+    name: windows-${{ matrix.arch.name }} (${{ matrix.target-node }})
+    permissions:
+      contents: write
+      actions: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target-node: [20, 22, 24]
+        arch:
+          - name: arm64
+            os: windows-11-arm
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          check-latest: true
+
+      - run: yarn install --ignore-engines
+
+      - run: choco install nasm
+
+      - run: yarn start --node-range node${{ matrix.target-node }} --arch ${{ matrix.arch.name }} --output dist --force-build
+
+      - name: Check if binary is compiled, skip if download only
+        id: check_file
+        run: |
+          ls dist
+          if (Test-Path -Path dist\\*.sha256sum -PathType Leaf) { 
+            "EXISTS=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            # Extract node version from filename (e.g., node-v22.22.0-win-arm64 -> v22.22.0)
+            $file = Get-ChildItem -Path dist\\*.sha256sum | Select-Object -First 1
+            $version = $file.Name -replace 'node-(v[0-9.]+)-.*', '$1'
+            "NODE_VERSION=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else { 
+            "EXISTS=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          }
+
+      - uses: actions/upload-artifact@v4
+        if: steps.check_file.outputs.EXISTS == 'true'
+        with:
+          name: node${{ matrix.target-node }}-windows-${{ matrix.arch.name }}
+          path: dist\\*
+
+      - name: Check if release already exists
+        if: steps.check_file.outputs.EXISTS == 'true'
+        id: check_release
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          $tag = "${{ steps.check_file.outputs.NODE_VERSION }}"
+          $release = gh release view $tag 2>&1
+          if ($LASTEXITCODE -eq 0) {
+            "RELEASE_EXISTS=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Release $tag already exists, skipping upload"
+          } else {
+            "RELEASE_EXISTS=false" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+            Write-Host "Release $tag does not exist, will create"
+          }
+
+      - name: Upload to Release
+        if: steps.check_file.outputs.EXISTS == 'true' && steps.check_release.outputs.RELEASE_EXISTS != 'true'
+        id: create_release
+        uses: softprops/action-gh-release@d4e8205d7e959a9107da6396278b2f1f07af0f9b
+        with:
+          token: ${{ github.token }}
+          tag_name: ${{ steps.check_file.outputs.NODE_VERSION }}
+          files: dist\\*
+
+      - name: Add release url to summary
+        if: steps.check_file.outputs.EXISTS == 'true' && steps.check_release.outputs.RELEASE_EXISTS != 'true'
+        run: echo "Release created/updated at ${{ steps.create_release.outputs.url }}" >> $env:GITHUB_STEP_SUMMARY
